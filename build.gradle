@@ -1,0 +1,373 @@
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+apply plugin: 'java'
+apply plugin: 'war'
+//apply plugin: "jacoco"
+
+javadoc {
+    options.encoding = "UTF-8"
+    options.charSet = "UTF-8"
+}
+
+sourceCompatibility = 1.8
+
+def defaultEncoding = 'UTF-8'
+
+[compileJava, compileTestJava]*.options*.encoding = defaultEncoding
+compileJava.dependsOn clean
+compileJava.options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+
+
+//jacoco {
+//    toolVersion = "0.7.2.201409121644"
+//    reportsDir = file("$buildDir/reports/jacoco")
+//}
+
+
+//task jacocoAllTestReport(type: JacocoReport, dependsOn: ["unitTest"]) {
+//    sourceSets sourceSets.main
+//    executionData files("$buildDir/jacoco/jacocoTest.exec")
+//}
+
+repositories {
+    mavenCentral()
+}
+
+
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+        }
+
+        resources {
+            srcDir 'src/main/resources'
+        }
+    }
+
+    unitTest {
+        java {
+            srcDir 'src/unit.test/java'
+        }
+
+        resources {
+            srcDir 'src/unit.test/resources'
+        }
+    }
+
+
+    intTest {
+        java {
+            srcDir 'src/int.test/java'
+        }
+
+        resources {
+            srcDir 'src/int.test/resources'
+        }
+    }
+
+
+    web {
+        resources {
+            srcDir 'src/main/webapp'
+        }
+        compileClasspath = sourceSets.main.output + configurations.testCompile
+        runtimeClasspath = output + compileClasspath
+    }
+
+}
+
+clean {
+    delete 'dist'
+    delete 'build'
+}
+
+
+def spring_version="4.3.3.RELEASE"
+List spring =[
+    "org.springframework:spring-core:$spring_version",
+    "org.springframework:spring-beans:$spring_version",
+    "org.springframework:spring-aop:$spring_version",
+    "org.springframework:spring-expression:$spring_version",
+    //"org.springframework:spring-instrument:$spring_version",
+    "org.springframework:spring-context:$spring_version",
+    "org.springframework:spring-jdbc:$spring_version",
+    "org.springframework:spring-context-support:$spring_version",
+    "org.springframework:spring-web:$spring_version",
+    //"org.springframework:spring-orm:$spring_version",
+    "org.springframework:spring-aspects:$spring_version",
+    "org.springframework:spring-webmvc:$spring_version",
+    "org.springframework:spring-test:$spring_version"
+]
+
+List logger =[
+     'org.apache.logging.log4j:log4j-api:2.1',
+     'org.apache.logging.log4j:log4j-core:2.1',
+     'org.apache.logging.log4j:log4j-slf4j-impl:2.1',
+	 'org.apache.logging.log4j:log4j-web:2.1'
+]
+
+List lmax = [
+	'com.lmax:disruptor:3.3.2'
+]
+
+
+List cxf = [
+    'org.apache.cxf:cxf-rt-frontend-jaxws:3.1.7',
+    'org.apache.cxf:cxf-rt-frontend-jaxrs:3.1.7',
+    'org.apache.cxf:cxf-rt-transports-http:3.1.7'
+]
+
+List apache = [
+        "org.apache.commons:commons-io:1.3.2",
+        "org.apache.commons:commons-lang3:3.3.2",
+        "org.apache.httpcomponents:httpclient:4.5.1"
+]
+
+List guava = [
+	'com.google.guava:guava:19.0'
+]
+
+List typesafe = [
+	"com.typesafe.play:play_2.11:2.5.8"
+]
+
+List inject = [
+	"javax.inject:javax.inject:1"
+]
+
+List junit = [
+	"junit:junit:4.12"
+]
+
+dependencies {
+    compile spring,logger,lmax,apache,cxf,guava,inject
+    testCompile spring,logger,lmax,apache,cxf,guava,inject,junit
+    runtime spring,logger,lmax,apache,cxf,guava,inject
+}
+
+
+task createProject << {
+    sourceSets*.java.srcDirs*.each { it.mkdirs() }
+    sourceSets*.resources.srcDirs*.each { it.mkdirs() }
+
+    delete file('src/test')
+    delete file('src/unit.test')
+    delete file('src/int.test')
+
+}
+
+
+task unitTest(type: Test, dependsOn: ['assemble']) {
+    def logHome = System.getProperty('soapdemo.log.home', './logs')
+
+    description = "run unit tests"
+    testClassesDir = project.sourceSets.unitTest.output.classesDir
+    classpath = project.sourceSets.unitTest.runtimeClasspath
+    //systemProperties['jar.path'] = jar.archivePath
+
+    // enable TestNG support (default is JUnit)
+    //useTestNG()
+
+    // set a system property for the test JVM(s)
+    //systemProperty 'some.prop', 'value'
+
+    // explicitly include or exclude tests
+    include 'com/xavier/**/*UnitTest*'
+    //exclude 'org/boo/**'
+
+    // show standard out and standard error of the test JVM(s) on the console
+    testLogging.showStandardStreams = true
+
+    // set heap size for the test JVM(s)
+    minHeapSize = "128m"
+    maxHeapSize = "512m"
+
+    // set JVM arguments for the test JVM(s)
+    jvmArgs "-XX:MaxPermSize=64m", "-Dlog4j.home=$logHome "
+
+    // listen to events in the test execution lifecycle
+    beforeTest { descriptor ->
+        logger.lifecycle("Running test: " + descriptor)
+
+
+    }
+
+    // listen to standard out and standard error of the test JVM(s)
+    onOutput { descriptor, event ->
+        logger.lifecycle("Test: " + descriptor + " produced standard out/err: " + event.message)
+    }
+
+    doFirst {
+        copy {
+            from 'src/main/resources'
+            into testClassesDir
+            include '*.properties'
+        }
+    }
+
+    //jacoco {
+    //    append = false
+    //    destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
+    //    classDumpFile = file("$buildDir/jacoco/classpathdumps")
+    //}
+
+
+}
+
+
+task intTest(type: Test, dependsOn: ['assemble']) {
+    def logHome = System.getProperty('xavier.log.home', './logs')
+
+    description = "run integration tests"
+    testClassesDir = project.sourceSets.intTest.output.classesDir
+    classpath = project.sourceSets.intTest.runtimeClasspath
+
+    // explicitly include or exclude tests
+    include 'com/xavier/**/*IntTest*'
+    //exclude 'org/boo/**'
+
+    // show standard out and standard error of the test JVM(s) on the console
+    testLogging.showStandardStreams = true
+
+    // set heap size for the test JVM(s)
+    minHeapSize = "128m"
+    maxHeapSize = "512m"
+
+    // set JVM arguments for the test JVM(s)
+    jvmArgs "-XX:MaxPermSize=64m", "-Dxavier.log.home=$logHome "
+
+    // listen to events in the test execution lifecycle
+    beforeTest { descriptor ->
+        logger.lifecycle("Running test: " + descriptor)
+
+        copy {
+            from 'src/main/resources'
+            into testClassesDir
+            //include 'rmb-client.properties'
+            //include 'gns-client.properties'
+        }
+    }
+
+    // listen to standard out and standard error of the test JVM(s)
+    onOutput { descriptor, event ->
+        logger.lifecycle("Test: " + descriptor + " produced standard out/err: " + event.message)
+    }
+
+
+    doFirst {
+        copy { 
+            from 'src/main/resources'
+            into testClassesDir
+            //include 'rmb-client.properties'
+            //include 'gns-client.properties'
+        }
+
+    }
+
+
+    //jacoco {
+    //    append = false
+    //    destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
+    //    classDumpFile = file("$buildDir/jacoco/classpathdumps")
+    //}
+}
+
+//build.dependsOn intTest
+
+javadoc {
+    source = sourceSets.main.java
+    classpath = configurations.compile
+    destinationDir = reporting.file("javadoc")
+}
+
+
+task packageJavadoc(type: Jar, dependsOn: ['javadoc']) {
+    from project.javadoc.destinationDir
+    classifier = 'javadoc'
+}
+
+task packageSources(type: Jar) {
+    from project.sourceSets.main.allSource
+    classifier = 'sources'  // either here or in artifacts block
+}
+
+
+artifacts {
+    //archives war
+    archives packageJavadoc
+    archives packageSources
+}
+
+
+
+task copyJars(type: Copy) {
+    from configurations.runtime
+    into 'lib'
+}
+task dependency(type: Copy) {
+    from configurations.runtime
+    into 'build/dependency'
+}
+
+
+
+
+war {
+    destinationDir file('dist')
+    archiveName 'cxf-spring.war'
+
+    // remove jars that conflict with container
+    rootSpec.exclude '**/javax.servlet-api*.jar'
+    rootSpec.exclude '**/jsp-api*.jar'
+    rootSpec.exclude '**/junit*.jar'
+    rootSpec.exclude '**/mockito-all*.jar'
+    rootSpec.exclude '**/powermock*.jar'
+    rootSpec.exclude '**/tomcat*.jar'
+
+    // exclude files
+    rootSpec.exclude '**/*.properties'
+    rootSpec.exclude '**/*.bak'
+    rootSpec.exclude '**/*DAO.xml'
+    rootSpec.exclude '**/log4j2.xml'
+    rootSpec.exclude '**/mybatis-config.xml'
+    rootSpec.exclude '**/*.pem'
+    rootSpec.exclude '**/*.prd'
+    rootSpec.exclude '**/*.int'
+    rootSpec.exclude '**/*.p12'
+
+    doLast {
+        copy {
+            from file('src/main/resources').listFiles().findAll { File f -> (f.name.endsWith('.xml') || f.name.endsWith('.properties') || f.name.endsWith('.pem') || f.name.endsWith('.prd') || f.name.endsWith('.p12')) }
+            into 'dist'
+        }
+    }
+}
+
+
+
+
+project.eclipseClasspath.doFirst {
+    // delay adding whenMerged till the entryAttributes are added (must be the last whenMerged)
+    project.eclipse.classpath.file.whenMerged { classpath ->
+        def includeDeps = project.configurations.getByName('runtime').collect { f -> f.absolutePath } as Set
+        classpath.entries.each { cp ->
+            if (cp instanceof org.gradle.plugins.ide.eclipse.model.Library) {
+                def include = includeDeps.contains(cp.path)
+                def attr = 'org.eclipse.jst.component.dependency'
+                if (!include) {
+                    cp.entryAttributes.remove(attr)
+                }
+            }
+        }
+    }
+}
+
+uploadArchives {
+    repositories {
+        flatDir(dirs: file('dist'))
+    }
+
+
+}
